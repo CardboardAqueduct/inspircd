@@ -58,11 +58,7 @@ public:
 
 class ModuleConnJoin : public Module
 {
-	public:	
-		ModuleConnJoin()
-		{
-		}
-	
+	public:
 		void init()
 		{
 			Implementation eventlist[] = { I_OnPostConnect };
