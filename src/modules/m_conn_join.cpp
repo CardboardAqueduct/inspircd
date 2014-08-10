@@ -32,7 +32,7 @@ static void JoinChannels(LocalUser* u, const std::string& chanlist)
 	while (chans.GetToken(chan))
 	{
 		if (ServerInstance->IsChannel(chan.c_str(), ServerInstance->Config->Limits.ChanMax))
-			Channel::JoinUser(user, chan.c_str, false, "", false, ServerInstance->Time());
+			Channel::JoinUser(u, chan.c_str(), false, "", false, ServerInstance->Time());
 	}
 }
 
@@ -40,32 +40,26 @@ class JoinTimer : public Timer
 {
 private:
 	LocalUser* const user;
-	const std:: string channels;
-	SimpleExtItem<JoinTimer>& ext;
+	const std::string channels;
 
 public:
-	JoinTimer(LocalUser* u, SimpleExtItem<JoinTimer>& ex, const std::string& chans, unsigned int delay)
+	JoinTimer(LocalUser* u, const std::string& chans, unsigned int delay)
 		: Timer(delay, ServerInstance->Time(), false)
-		, user(u), channels(chans), ext(ex)
+		, user(u), channels(chans)
 	{
-		ServerInstance->Timers->AddTimer(this);
 	}
 
 	virtual void Tick(time_t time)
 	{
 		if(user->chans.empty())
 			JoinChannels(user, channels);
-
-		ext.unset(user);
 	} 
+};
 
 class ModuleConnJoin : public Module
 {
-	simpleExtItem<JoinTimer> ext;
-
-	public:
-	
-		ModuleConnJoin() : ext("join_timer", this)
+	public:	
+		ModuleConnJoin()
 		{
 		}
 	
@@ -87,20 +81,21 @@ class ModuleConnJoin : public Module
 
 		void OnPostConnect(User* user)
 		{
-			if (!IS_LOCAL(user))
+			LocalUser* localuser = IS_LOCAL(user);
+			if (!localuser)
 				return;
 
 			ConfigTag* tag = ServerInstance->Config->ConfValue("autojoin");
 			
 			std::string defchans = tag->getString("channel");
-			std::string chanlist = user->GetClass()->config->getString("autojoin");
+			std::string chanlist = localuser->GetClass()->config->getString("autojoin");
 			
-			unsigned int defdelay = tag->getint("delay", 0, 0, 60);
-			unsigned int chandelay = user->GetClass()->config->getInt("autojoindelay", 0, 0, 60);
+			unsigned int defdelay = tag->getInt("delay", 0);
+			unsigned int chandelay = localuser->GetClass()->config->getInt("autojoindelay", 0);
+
 			
 			if(chanlist.empty())
 			{
-				//return;
 				if (defchans.empty())
 					return;
 				chanlist = defchans;
@@ -110,7 +105,10 @@ class ModuleConnJoin : public Module
 			if(!chandelay)
 				JoinChannels(localuser, chanlist);
 			else
-				ext.set(localuser, new JoinTimer(localuser, ext, chanlist, chandelay));
+			{
+				JoinTimer* JT = new JoinTimer(localuser, chanlist, chandelay);	
+				ServerInstance->Timers->AddTimer(JT);
+			}
 		}
 };
 
