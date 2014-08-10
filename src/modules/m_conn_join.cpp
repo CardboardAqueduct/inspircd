@@ -24,9 +24,51 @@
 
 /* $ModDesc: Forces users to join the specified channel(s) on connect */
 
+static void JoinChannels(LocalUser* u, const std::string& chanlist)
+{
+	irc::commasepstream chans(chanlist);
+	std::string chan;
+
+	while (chans.GetToken(chan))
+	{
+		if (ServerInstance->IsChannel(chan.c_str(), ServerInstance->Config->Limits.ChanMax))
+			Channel::JoinUser(user, chan.c_str, false, "", false, ServerInstance->Time());
+	}
+}
+
+class JoinTimer : public Timer
+{
+private:
+	LocalUser* const user;
+	const std:: string channels;
+	SimpleExtItem<JoinTimer>& ext;
+
+public:
+	JoinTimer(LocalUser* u, SimpleExtItem<JoinTimer>& ex, const std::string& chans, unsigned int delay)
+		: Timer(delay, ServerInstance->Time(), false)
+		, user(u), channels(chans), ext(ex)
+	{
+		ServerInstance->Timers->AddTimer(this);
+	}
+
+	virtual void Tick(time_t time)
+	{
+		if(user->chans.empty())
+			JoinChannels(user, channels);
+
+		ext.unset(user);
+	} 
+
 class ModuleConnJoin : public Module
 {
+	simpleExtItem<JoinTimer> ext;
+
 	public:
+	
+		ModuleConnJoin() : ext("join_timer", this)
+		{
+		}
+	
 		void init()
 		{
 			Implementation eventlist[] = { I_OnPostConnect };
@@ -48,17 +90,27 @@ class ModuleConnJoin : public Module
 			if (!IS_LOCAL(user))
 				return;
 
-			std::string chanlist = ServerInstance->Config->ConfValue("autojoin")->getString("channel");
-			chanlist = user->GetClass()->config->getString("autojoin", chanlist);
-
-			irc::commasepstream chans(chanlist);
-			std::string chan;
-
-			while (chans.GetToken(chan))
+			ConfigTag* tag = ServerInstance->Config->ConfValue("autojoin");
+			
+			std::string defchans = tag->getString("channel");
+			std::string chanlist = user->GetClass()->config->getString("autojoin");
+			
+			unsigned int defdelay = tag->getint("delay", 0, 0, 60);
+			unsigned int chandelay = user->GetClass()->config->getInt("autojoindelay", 0, 0, 60);
+			
+			if(chanlist.empty())
 			{
-				if (ServerInstance->IsChannel(chan.c_str(), ServerInstance->Config->Limits.ChanMax))
-					Channel::JoinUser(user, chan.c_str(), false, "", false, ServerInstance->Time());
-			}
+				//return;
+				if (defchans.empty())
+					return;
+				chanlist = defchans;
+				chandelay = defdelay;
+			}	
+			
+			if(!chandelay)
+				JoinChannels(localuser, chanlist);
+			else
+				ext.set(localuser, new JoinTimer(localuser, ext, chanlist, chandelay));
 		}
 };
 

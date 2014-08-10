@@ -549,7 +549,10 @@
 # If you have m_conn_join.so loaded, you can configure it using the
 # following values, or set autojoin="#chat,#help" in <connect> blocks.
 #
+# Join users immediately after connection to #one #two and #three.
 #<autojoin channel="#one,#two,#three">
+# Join users to #chat after 15 seconds if they aren't on any channels.
+#<autojoin channel="#chat" delay="15">
 
 #-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 # Set modes on connect module: When this module is loaded <connect>
